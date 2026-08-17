@@ -268,11 +268,32 @@ export default function ConnectPage() {
               </Button>
             </>
           ) : isConnecting ? (
-            <div className="flex flex-col items-center gap-3 py-4">
-              <Loader2 size={32} className="animate-spin text-[#6c63ff]" />
-              <p className="text-sm text-[#6b7280]">
-                Generating QR code…
-              </p>
+            <div className="flex flex-col items-center gap-4 py-8">
+              <div className="relative w-16 h-16">
+                <div className="absolute inset-0 rounded-full border-4 border-[#6c63ff]/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-[#6c63ff] animate-spin" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-[#e8eaf0]">
+                  Launching WhatsApp…
+                </p>
+                <p className="text-xs text-[#6b7280] mt-1">
+                  Starting browser on server — this takes 30–60s on first run
+                </p>
+              </div>
+              {/* Progress hint steps */}
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                {[
+                  "Starting Chrome browser",
+                  "Loading WhatsApp Web",
+                  "Generating QR code",
+                ].map((step, i) => (
+                  <div key={i} className="flex items-center gap-2.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#6c63ff]/40 shrink-0" />
+                    <p className="text-xs text-[#6b7280]">{step}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-4 py-4">
