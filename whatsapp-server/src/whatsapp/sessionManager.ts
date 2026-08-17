@@ -99,9 +99,47 @@ async function waitForLockRelease(
   console.warn(`[WA] Lockfile still present after ${timeoutMs}ms for ${userId}`);
 }
 
+// ─── Chrome executable path ───────────────────────────────────────────────────
+// Render (Linux) installs Chrome via puppeteer into a predictable path.
+// We also check common system Chrome locations as fallback.
+
+function getChromePath(): string | undefined {
+  // 1. Explicit env override (set CHROME_BIN on Render if needed)
+  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
+
+  // 2. Puppeteer's own downloaded Chrome (works after `puppeteer browsers install chrome`)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { executablePath } = require("puppeteer") as {
+      executablePath: () => string;
+    };
+    const p = executablePath();
+    if (p && fs.existsSync(p)) return p;
+  } catch { /* puppeteer not available as standalone */ }
+
+  // 3. Common Linux system paths (Render, Ubuntu, Debian)
+  const linuxPaths = [
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+  ];
+  for (const p of linuxPaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  // 4. Let puppeteer-core decide (Windows local dev — uses its own cache)
+  return undefined;
+}
+
 // ─── Client factory ───────────────────────────────────────────────────────────
 
 function buildClient(userId: string): Client {
+  const executablePath = getChromePath();
+  if (executablePath) {
+    console.log(`[WA] Using Chrome: ${executablePath}`);
+  }
+
   return new Client({
     authStrategy: new LocalAuth({
       clientId: userId,
@@ -109,6 +147,7 @@ function buildClient(userId: string): Client {
     }),
     puppeteer: {
       headless: true,
+      ...(executablePath ? { executablePath } : {}),
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",

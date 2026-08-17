@@ -6,8 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js"
+    "build": "tsc && npx puppeteer browsers install chrome",
+    "start": "node dist/server.js",
+    "postinstall": "npx puppeteer browsers install chrome"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
