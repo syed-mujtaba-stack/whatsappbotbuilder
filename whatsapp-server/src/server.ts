@@ -16,9 +16,26 @@ import jwt from "jsonwebtoken";
 
 const app = express();
 
+// Build allowed origins list — strip trailing slashes, support comma-separated values
+const rawOrigins = process.env.FRONTEND_URL ?? "http://localhost:3000";
+const allowedOrigins = rawOrigins
+  .split(",")
+  .map((o) => o.trim().replace(/\/$/, ""));
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (Render health checks, curl, etc.)
+      if (!origin) return callback(null, true);
+      // Strip trailing slash from incoming origin before comparing
+      const clean = origin.replace(/\/$/, "");
+      if (allowedOrigins.includes(clean)) {
+        callback(null, true);
+      } else {
+        console.warn(`[CORS] Blocked origin: ${origin}`);
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
   })
 );
