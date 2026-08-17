@@ -100,24 +100,46 @@ async function waitForLockRelease(
 }
 
 // ─── Chrome executable path ───────────────────────────────────────────────────
-// Render (Linux) installs Chrome via puppeteer into a predictable path.
-// We also check common system Chrome locations as fallback.
 
 function getChromePath(): string | undefined {
-  // 1. Explicit env override (set CHROME_BIN on Render if needed)
-  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
+  // 1. Explicit env override
+  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN)) {
+    return process.env.CHROME_BIN;
+  }
 
-  // 2. Puppeteer's own downloaded Chrome (works after `puppeteer browsers install chrome`)
+  // 2. Puppeteer's downloaded Chrome via .puppeteerrc.cjs cache dir
+  //    Render path: <project_root>/.cache/puppeteer/chrome/linux-xxx/chrome-linux64/chrome
+  try {
+    const cacheDir = path.join(__dirname, "..", "..", ".cache", "puppeteer");
+    if (fs.existsSync(cacheDir)) {
+      // Walk chrome/linux-* dirs to find the executable
+      const chromeDir = path.join(cacheDir, "chrome");
+      if (fs.existsSync(chromeDir)) {
+        const versions = fs.readdirSync(chromeDir);
+        for (const ver of versions) {
+          const candidates = [
+            path.join(chromeDir, ver, "chrome-linux64", "chrome"),
+            path.join(chromeDir, ver, "chrome-linux", "chrome"),
+            path.join(chromeDir, ver, "chrome-win64", "chrome.exe"),
+            path.join(chromeDir, ver, "chrome-win32", "chrome.exe"),
+          ];
+          for (const c of candidates) {
+            if (fs.existsSync(c)) return c;
+          }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 3. puppeteer package executablePath()
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { executablePath } = require("puppeteer") as {
-      executablePath: () => string;
-    };
+    const { executablePath } = require("puppeteer") as { executablePath: () => string };
     const p = executablePath();
     if (p && fs.existsSync(p)) return p;
-  } catch { /* puppeteer not available as standalone */ }
+  } catch { /* not available */ }
 
-  // 3. Common Linux system paths (Render, Ubuntu, Debian)
+  // 4. System Chrome on Linux (Render, Ubuntu, Debian)
   const linuxPaths = [
     "/usr/bin/google-chrome-stable",
     "/usr/bin/google-chrome",
@@ -128,7 +150,7 @@ function getChromePath(): string | undefined {
     if (fs.existsSync(p)) return p;
   }
 
-  // 4. Let puppeteer-core decide (Windows local dev — uses its own cache)
+  // 5. Let puppeteer-core try its own default (Windows local dev)
   return undefined;
 }
 

@@ -21,8 +21,8 @@ whatsapp-server/dist/
 whatsapp-server/.wwebjs_auth/
 whatsapp-server/.wwebjs_cache/
 
-# ── Puppeteer / Chrome ────────────────────────────────────────────────────────
-.cache/
+# ── Puppeteer / Chrome cache (downloaded binary — not needed in repo) ─────────
+whatsapp-server/.cache/
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
