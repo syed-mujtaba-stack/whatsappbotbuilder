@@ -140,20 +140,56 @@ router.put(
   }
 );
 
-// ─── POST /api/whatsapp/pairing-code ─ Get phone-number pairing code ──────────
-// Call this after /connect to get an 8-char code for the user to enter in
-// their WhatsApp mobile app (Settings → Linked Devices → Link with phone number)
+// ─── POST /api/whatsapp/pairing-code ──────────────────────────────────────────
+// All-in-one: starts the session if needed, waits for Chrome, returns code.
+// Body: { bot_id, phone }
 
 router.post(
   "/pairing-code",
-  validate(z.object({ phone: z.string().min(10).max(15) })),
+  validate(
+    z.object({
+      bot_id: z.string().uuid("Invalid bot ID"),
+      phone: z
+        .string()
+        .transform((v) => v.replace(/\D/g, ""))
+        .refine((v) => v.length >= 10 && v.length <= 15, {
+          message: "Phone must be 10-15 digits with country code (e.g. 923001234567)",
+        }),
+    })
+  ),
   async (req: AuthRequest, res: Response): Promise<void> => {
+    const userId = req.userId!;
+    const { bot_id, phone } = req.body as { bot_id: string; phone: string };
+
     try {
-      const { phone } = req.body as { phone: string };
-      const code = await requestPairingCode(req.userId!, phone);
+      // 1. Verify bot ownership
+      const bot = await getBotById(bot_id, userId);
+      if (!bot) {
+        res.status(404).json({ error: "Bot not found" });
+        return;
+      }
+
+      // 2. Start session if not already running
+      const currentStatus = getSessionStatus(userId);
+      if (currentStatus === "connected") {
+        res.status(409).json({ error: "Already connected. Disconnect first." });
+        return;
+      }
+
+      if (currentStatus !== "connecting") {
+        // Start fresh session — non-blocking
+        startSession(userId, bot_id).catch((err) =>
+          console.error(`[WA] Session start error for ${userId}:`, err)
+        );
+        await upsertSession(userId, "connecting", null, bot_id);
+      }
+
+      // 3. requestPairingCode waits internally up to 60s for Chrome to be ready
+      const code = await requestPairingCode(userId, phone);
       res.json({ code });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to get pairing code";
+      console.error(`[WA] pairing-code error for ${userId}:`, msg);
       res.status(400).json({ error: msg });
     }
   }

@@ -119,31 +119,24 @@ export default function ConnectPage() {
     if (!selectedBot) { toast.error("Select a bot first"); return; }
 
     if (linkMethod === "phone") {
-      const cleaned = phoneInput.replace(/\D/g, "");
-      if (cleaned.length < 10) {
-        setPhoneError("Enter full number with country code e.g. 923001234567");
-        return;
-      }
+      // Phone method: one call does everything
+      await requestCode();
+      return;
     }
 
+    // QR method
     setConnecting(true);
     setQrDataUrl(null);
     setPairingCode(null);
-
     try {
       await whatsappApi.connect(selectedBot);
-
-      if (linkMethod === "phone") {
-        // Backend will wait up to 60s for chrome to be ready — call immediately
-        await requestCode();
-      }
     } catch {
       toast.error("Failed to start session");
       setConnecting(false);
     }
   }
 
-  // ── Request pairing code ──────────────────────────────────────────────────
+  // ── Request pairing code (phone method) ──────────────────────────────────
   async function requestCode(phone?: string) {
     const num = (phone ?? phoneInput).replace(/\D/g, "");
     if (num.length < 10) {
@@ -152,17 +145,19 @@ export default function ConnectPage() {
     }
     setPhoneError("");
     setPairingLoading(true);
+    setConnecting(true);
+    setPairingCode(null);
     try {
-      const { data } = await whatsappApi.pairingCode(num);
+      // Single call — starts session + waits for Chrome + returns code
+      const { data } = await whatsappApi.pairingCode(selectedBot, num);
       setPairingCode(data.code);
-      setConnecting(false);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error
         ?? "Failed to get pairing code. Try QR method instead.";
       toast.error(msg, { duration: 6000 });
-      setConnecting(false);
     } finally {
+      setConnecting(false);
       setPairingLoading(false);
     }
   }
