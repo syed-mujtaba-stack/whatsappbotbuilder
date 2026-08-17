@@ -98,6 +98,8 @@ export const whatsappApi = {
     api.put("/api/whatsapp/bot", { bot_id }),
   logs: (limit = 50) =>
     api.get<{ logs: MessageLog[] }>(`/api/whatsapp/logs?limit=${limit}`),
+  pairingCode: (phone: string) =>
+    api.post<{ code: string }>("/api/whatsapp/pairing-code", { phone }),
 };
 
 export default api;

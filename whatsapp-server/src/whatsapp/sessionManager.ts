@@ -247,7 +247,7 @@ export async function startSession(
   sessions.set(userId, entry);
   await upsertSession(userId, "connecting", null, botId);
 
-  // ── QR ────────────────────────────────────────────────────────────────────
+  // ── QR (fallback if phone pairing not used) ───────────────────────────────
   client.on("qr", async (qr: string) => {
     try {
       const qrDataUrl = await qrcode.toDataURL(qr, { scale: 6 });
@@ -368,6 +368,41 @@ export function getSessionStatus(
   userId: string
 ): "connecting" | "connected" | "disconnected" {
   return sessions.get(userId)?.status ?? "disconnected";
+}
+
+/**
+ * Request a phone-number pairing code for the session.
+ * Call this after startSession() — the client must be initializing but
+ * not yet authenticated. Returns the 8-character code to show to the user.
+ *
+ * The user enters this code in WhatsApp mobile:
+ *   Settings → Linked Devices → Link a Device → Link with phone number
+ */
+export async function requestPairingCode(
+  userId: string,
+  phoneNumber: string
+): Promise<string> {
+  const entry = sessions.get(userId);
+  if (!entry) throw new Error("No active session found — call connect first");
+
+  // Strip everything except digits
+  const cleaned = phoneNumber.replace(/\D/g, "");
+  if (cleaned.length < 10 || cleaned.length > 15) {
+    throw new Error("Invalid phone number — must be 10-15 digits with country code");
+  }
+
+  try {
+    // whatsapp-web.js requestPairingCode returns the 8-char code
+    const code: string = await (entry.client as unknown as {
+      requestPairingCode: (phone: string) => Promise<string>;
+    }).requestPairingCode(cleaned);
+
+    console.log(`[WA] Pairing code issued for ${userId}: ${code}`);
+    return code;
+  } catch (err) {
+    console.error(`[WA] requestPairingCode error for ${userId}:`, err);
+    throw new Error("Failed to get pairing code — make sure WhatsApp is not already linked");
+  }
 }
 
 export async function destroySession(userId: string): Promise<void> {

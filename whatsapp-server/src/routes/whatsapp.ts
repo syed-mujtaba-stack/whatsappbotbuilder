@@ -7,6 +7,7 @@ import {
   destroySession,
   getSessionStatus,
   updateSessionBot,
+  requestPairingCode,
 } from "../whatsapp/sessionManager";
 import {
   getBotById,
@@ -135,6 +136,25 @@ router.put(
     } catch (err) {
       console.error("Change bot error:", err);
       res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ─── POST /api/whatsapp/pairing-code ─ Get phone-number pairing code ──────────
+// Call this after /connect to get an 8-char code for the user to enter in
+// their WhatsApp mobile app (Settings → Linked Devices → Link with phone number)
+
+router.post(
+  "/pairing-code",
+  validate(z.object({ phone: z.string().min(10).max(15) })),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { phone } = req.body as { phone: string };
+      const code = await requestPairingCode(req.userId!, phone);
+      res.json({ code });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to get pairing code";
+      res.status(400).json({ error: msg });
     }
   }
 );
