@@ -117,21 +117,25 @@ export default function ConnectPage() {
   // ── Start session ─────────────────────────────────────────────────────────
   async function handleConnect() {
     if (!selectedBot) { toast.error("Select a bot first"); return; }
+
+    if (linkMethod === "phone") {
+      const cleaned = phoneInput.replace(/\D/g, "");
+      if (cleaned.length < 10) {
+        setPhoneError("Enter full number with country code e.g. 923001234567");
+        return;
+      }
+    }
+
     setConnecting(true);
     setQrDataUrl(null);
     setPairingCode(null);
+
     try {
       await whatsappApi.connect(selectedBot);
-      // For phone method: after session starts, request pairing code
+
       if (linkMethod === "phone") {
-        const cleaned = phoneInput.replace(/\D/g, "");
-        if (cleaned.length < 10) {
-          setPhoneError("Enter full number with country code e.g. 923001234567");
-          setConnecting(false);
-          return;
-        }
-        // Wait a moment for client to initialize before requesting code
-        setTimeout(() => requestCode(cleaned), 5_000);
+        // Backend will wait up to 60s for chrome to be ready — call immediately
+        await requestCode();
       }
     } catch {
       toast.error("Failed to start session");
@@ -153,9 +157,10 @@ export default function ConnectPage() {
       setPairingCode(data.code);
       setConnecting(false);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })
-        ?.response?.data?.error ?? "Failed to get pairing code";
-      toast.error(msg);
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? "Failed to get pairing code. Try QR method instead.";
+      toast.error(msg, { duration: 6000 });
       setConnecting(false);
     } finally {
       setPairingLoading(false);

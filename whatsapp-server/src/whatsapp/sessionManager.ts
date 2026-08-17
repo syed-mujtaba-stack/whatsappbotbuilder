@@ -371,38 +371,65 @@ export function getSessionStatus(
 }
 
 /**
- * Request a phone-number pairing code for the session.
- * Call this after startSession() — the client must be initializing but
- * not yet authenticated. Returns the 8-character code to show to the user.
- *
- * The user enters this code in WhatsApp mobile:
- *   Settings → Linked Devices → Link a Device → Link with phone number
+ * Request a phone-number pairing code.
+ * Waits up to 60s for the client to reach the QR stage before requesting.
  */
 export async function requestPairingCode(
   userId: string,
   phoneNumber: string
 ): Promise<string> {
   const entry = sessions.get(userId);
-  if (!entry) throw new Error("No active session found — call connect first");
+  if (!entry) {
+    throw new Error("No active session — click 'Get Pairing Code' first to start the session");
+  }
 
-  // Strip everything except digits
   const cleaned = phoneNumber.replace(/\D/g, "");
   if (cleaned.length < 10 || cleaned.length > 15) {
-    throw new Error("Invalid phone number — must be 10-15 digits with country code");
+    throw new Error("Invalid phone number — include country code, digits only (e.g. 923001234567)");
   }
 
-  try {
-    // whatsapp-web.js requestPairingCode returns the 8-char code
-    const code: string = await (entry.client as unknown as {
-      requestPairingCode: (phone: string) => Promise<string>;
-    }).requestPairingCode(cleaned);
+  // whatsapp-web.js needs the client to reach the QR/auth stage before
+  // requestPairingCode is available. Poll until the internal page is ready.
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const client = entry.client as unknown as {
+        requestPairingCode?: (phone: string) => Promise<string>;
+        pupPage?: { evaluate: (fn: () => unknown) => Promise<unknown> };
+      };
 
-    console.log(`[WA] Pairing code issued for ${userId}: ${code}`);
-    return code;
-  } catch (err) {
-    console.error(`[WA] requestPairingCode error for ${userId}:`, err);
-    throw new Error("Failed to get pairing code — make sure WhatsApp is not already linked");
+      if (typeof client.requestPairingCode !== "function") {
+        throw new Error(
+          "requestPairingCode is not available — your whatsapp-web.js version may not support phone pairing. Try QR method instead."
+        );
+      }
+
+      const code = await client.requestPairingCode(cleaned);
+      if (!code) throw new Error("Empty code returned");
+
+      console.log(`[WA] Pairing code for ${userId}: ${code}`);
+      return code;
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+
+      // These errors mean the browser isn't ready yet — retry
+      if (
+        msg.includes("Execution context") ||
+        msg.includes("Target closed") ||
+        msg.includes("Session closed") ||
+        msg.includes("Cannot read") ||
+        msg.includes("not attached")
+      ) {
+        await new Promise((r) => setTimeout(r, 3_000));
+        continue;
+      }
+
+      // Real error — propagate
+      throw err;
+    }
   }
+
+  throw new Error("Timed out waiting for WhatsApp to initialize. Try again.");
 }
 
 export async function destroySession(userId: string): Promise<void> {

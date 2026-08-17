@@ -3,7 +3,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000",
   headers: { "Content-Type": "application/json" },
-  timeout: 15000,
+  timeout: 90_000, // 90s — pairing code can take up to 60s on Render free tier
 });
 
 // ─── Request interceptor — attach JWT ────────────────────────────────────────
